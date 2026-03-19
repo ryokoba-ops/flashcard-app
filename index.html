@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>単語帳アプリ</title>
 
   <!-- PWA用 -->
@@ -10,21 +11,16 @@
   <style>
     body {
       background-color: #121212;
-      color: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      font-family: Arial;
+  color: white;
+  margin: 0;
+  font-family: Arial;
     }
 
     /* ★ iPhone風 */
     #app {
-      width: 375px;
-      height: 667px;
-      border: 2px solid #333;
-      border-radius: 20px;
+      width: 100%;
+      max-width: 430px; /* iPhone16相当 */
+      height: 100vh;
       padding: 20px;
       box-sizing: border-box;
       background-color: #000;
@@ -33,7 +29,7 @@
 
     #card {
       width: 100%;
-      height: 200px;
+      height: 300px; 
       margin: 20px auto;
       border: 2px solid white;
       background-color: #1e1e1e;
@@ -42,7 +38,7 @@
       justify-content: center;
       padding: 10px;
       box-sizing: border-box;
-
+    
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-all;
@@ -130,6 +126,13 @@ function parseCSV(text) {
 // 表示
 function showCard() {
   if (cards.length === 0) return;
+
+  // ★追加：全部覚えた判定
+  if (learned.size === cards.length) {
+    document.getElementById("card").textContent = "全部覚えた！🎉";
+    document.getElementById("card").style.fontSize = "24px";
+    return;
+  }
 
   const card = cards[currentIndex];
   const text = isFront ? card.front : card.back;
