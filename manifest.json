@@ -1,0 +1,8 @@
+{
+  "name": "単語帳アプリ",
+  "short_name": "単語帳",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}
