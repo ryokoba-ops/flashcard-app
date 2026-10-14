@@ -11,25 +11,26 @@
   <style>
     body {
       background-color: #121212;
-  color: white;
-  margin: 0;
-  font-family: Arial;
+      color: white;
+      margin: 0;
+      font-family: Arial, sans-serif;
     }
 
-    /* ★ iPhone風 */
+    /* iPhone風 */
     #app {
       width: 100%;
-      max-width: 430px; /* iPhone16相当 */
-      height: 100vh;
+      max-width: 430px;
+      min-height: 100vh;
       padding: 20px;
       box-sizing: border-box;
       background-color: #000;
       text-align: center;
+      margin: 0 auto;
     }
 
     #card {
       width: 100%;
-      height: 300px; 
+      height: 300px;
       margin: 20px auto;
       border: 2px solid white;
       background-color: #1e1e1e;
@@ -38,10 +39,9 @@
       justify-content: center;
       padding: 10px;
       box-sizing: border-box;
-    
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      word-break: break-all;
+      word-break: break-word;
     }
 
     button {
@@ -50,6 +50,12 @@
       background-color: #333;
       color: white;
       border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:active {
+      background-color: #555;
     }
 
     /* 進捗バー */
@@ -65,22 +71,33 @@
       height: 100%;
       width: 0%;
       background: #4caf50;
+      transition: width 0.2s;
+    }
+
+    #progressText {
+      margin-top: 8px;
+    }
+
+    #fileInput {
+      max-width: 100%;
+      margin-bottom: 15px;
     }
   </style>
 </head>
-<body>
 
+<body>
 <div id="app">
   <h3>単語帳</h3>
 
-  <input type="file" id="fileInput">
+  <input type="file" id="fileInput" accept=".csv,text/csv">
 
   <div id="progressBar">
     <div id="progressFill"></div>
   </div>
-  <div id="progressText"></div>
 
-  <div id="card">ここに表示</div>
+  <div id="progressText">0 / 0</div>
+
+  <div id="card">CSVを読み込んでください</div>
 
   <div>
     <button onclick="prevCard()">戻る</button>
@@ -100,135 +117,334 @@ let learned = new Set();
 
 const STORAGE_KEY = "flashcard_progress";
 
-// CSV読み込み
+/*
+ * CSV読み込み
+ * カードごとに固定IDを付与する
+ */
 document.getElementById("fileInput").addEventListener("change", function(e) {
   const file = e.target.files[0];
+
+  if (!file) return;
+
   const reader = new FileReader();
 
   reader.onload = function(event) {
     parseCSV(event.target.result);
+
+    // CSVの内容に対応する学習履歴を読み込む
     loadProgress();
+
+    currentIndex = findNextUnlearnedIndex(0);
+    isFront = true;
+
     showCard();
     updateProgress();
   };
 
-  reader.readAsText(file);
+  reader.readAsText(file, "UTF-8");
 });
 
-// CSV
+/*
+ * CSV解析
+ * 1列目：表、2列目：裏
+ */
 function parseCSV(text) {
-  cards = text.trim().split("\n").map(line => {
-    const [front, back] = line.split(",");
-    return { front, back };
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter(line => line.trim() !== "");
+
+  cards = lines.map((line, index) => {
+    const columns = line.split(",");
+
+    return {
+      id: index,
+      front: (columns[0] || "").trim(),
+      back: (columns.slice(1).join(",") || "").trim()
+    };
   });
 }
 
-// 表示
-function showCard() {
-  if (cards.length === 0) return;
+/*
+ * 未習得カードのインデックスを探す
+ */
+function findNextUnlearnedIndex(startIndex, direction = 1) {
+  if (cards.length === 0) return -1;
 
-  // ★追加：全部覚えた判定
-  if (learned.size === cards.length) {
-    document.getElementById("card").textContent = "全部覚えた！🎉";
-    document.getElementById("card").style.fontSize = "24px";
+  for (let i = 0; i < cards.length; i++) {
+    const index =
+      (startIndex + direction * i + cards.length) % cards.length;
+
+    if (!learned.has(cards[index].id)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+/*
+ * カード表示
+ */
+function showCard() {
+  const el = document.getElementById("card");
+
+  if (cards.length === 0) {
+    el.textContent = "CSVを読み込んでください";
     return;
+  }
+
+  // すべて覚えた場合
+  const unlearnedCards = cards.filter(
+    card => !learned.has(card.id)
+  );
+
+  if (unlearnedCards.length === 0) {
+    el.textContent = "全部覚えた！🎉";
+    el.style.fontSize = "24px";
+    return;
+  }
+
+  // 現在のカードが覚えた単語なら、未習得カードへ移動
+  if (
+    currentIndex < 0 ||
+    currentIndex >= cards.length ||
+    learned.has(cards[currentIndex].id)
+  ) {
+    currentIndex = findNextUnlearnedIndex(
+      Math.max(currentIndex, 0)
+    );
   }
 
   const card = cards[currentIndex];
   const text = isFront ? card.front : card.back;
 
-  const el = document.getElementById("card");
   el.textContent = text;
-
   adjustFontSize(text);
 }
 
-// ★ 文字サイズ自動調整
+/*
+ * 文字サイズ自動調整
+ */
 function adjustFontSize(text) {
   const length = text.length;
   let size = 24;
 
-  if (length > 100) size = 14;
-  else if (length > 60) size = 18;
-  else if (length > 30) size = 20;
+  if (length > 100) {
+    size = 14;
+  } else if (length > 60) {
+    size = 18;
+  } else if (length > 30) {
+    size = 20;
+  }
 
   document.getElementById("card").style.fontSize = size + "px";
 }
 
-// めくる
+/*
+ * カードをめくる
+ */
 function flipCard() {
+  if (cards.length === 0) return;
+
   isFront = !isFront;
   showCard();
 }
 
-// 次へ
+/*
+ * 次へ
+ * 覚えたカードはスキップする
+ */
 function nextCard() {
-  let next = currentIndex;
-  do {
-    next = (next + 1) % cards.length;
-  } while (learned.has(next) && next !== currentIndex);
+  if (cards.length === 0) return;
 
-  currentIndex = next;
-  isFront = true;
-  showCard();
-}
+  const nextIndex = findNextUnlearnedIndex(
+    currentIndex + 1
+  );
 
-// 戻る
-function prevCard() {
-  let prev = currentIndex;
-  do {
-    prev = (prev - 1 + cards.length) % cards.length;
-  } while (learned.has(prev) && prev !== currentIndex);
-
-  currentIndex = prev;
-  isFront = true;
-  showCard();
-}
-
-// 覚えた
-function markLearned() {
-  learned.add(currentIndex);
-  saveProgress();
-  nextCard();
-  updateProgress();
-}
-
-// シャッフル
-function shuffleCards() {
-  cards.sort(() => Math.random() - 0.5);
-  showCard();
-}
-
-// リセット
-function resetProgress() {
-  if (confirm("本当にリセットしてよいですか？")) {
-    learned.clear();
-    localStorage.removeItem(STORAGE_KEY);
-    updateProgress();
+  if (nextIndex === -1) {
     showCard();
+    updateProgress();
+    return;
+  }
+
+  currentIndex = nextIndex;
+  isFront = true;
+
+  showCard();
+}
+
+/*
+ * 戻る
+ * 覚えたカードはスキップする
+ */
+function prevCard() {
+  if (cards.length === 0) return;
+
+  const prevIndex = findNextUnlearnedIndex(
+    currentIndex - 1,
+    -1
+  );
+
+  if (prevIndex === -1) {
+    showCard();
+    return;
+  }
+
+  currentIndex = prevIndex;
+  isFront = true;
+
+  showCard();
+}
+
+/*
+ * 覚えた
+ * 固定IDを保存するため、シャッフルしても状態がずれない
+ */
+function markLearned() {
+  if (cards.length === 0) return;
+
+  const card = cards[currentIndex];
+
+  if (!card || learned.has(card.id)) return;
+
+  learned.add(card.id);
+
+  saveProgress();
+  updateProgress();
+
+  // 次の未習得カードへ
+  nextCard();
+}
+
+/*
+ * シャッフル
+ * 未習得カードだけをシャッフルする
+ */
+function shuffleCards() {
+  if (cards.length === 0) return;
+
+  // 未習得カードだけを取り出す
+  const unlearnedCards = cards.filter(
+    card => !learned.has(card.id)
+  );
+
+  // Fisher-Yatesアルゴリズムでシャッフル
+  for (let i = unlearnedCards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+
+    [unlearnedCards[i], unlearnedCards[j]] =
+      [unlearnedCards[j], unlearnedCards[i]];
+  }
+
+  // 覚えたカードは出題対象から外す
+  const learnedCards = cards.filter(
+    card => learned.has(card.id)
+  );
+
+  // 未習得カードを先頭に配置する
+  cards = [...unlearnedCards, ...learnedCards];
+
+  // 未習得カードの先頭から再開
+  currentIndex = unlearnedCards.length > 0 ? 0 : -1;
+  isFront = true;
+
+  showCard();
+}
+
+/*
+ * リセット
+ */
+function resetProgress() {
+  if (!confirm("学習履歴をリセットしてよいですか？")) {
+    return;
+  }
+
+  learned.clear();
+
+  localStorage.removeItem(STORAGE_KEY);
+
+  currentIndex = 0;
+  isFront = true;
+
+  updateProgress();
+  showCard();
+}
+
+/*
+ * 学習履歴保存
+ * CSVのカードIDを含めて保存する
+ */
+function saveProgress() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      learned: Array.from(learned),
+      cardSignature: getCardSignature()
+    })
+  );
+}
+
+/*
+ * CSVの識別情報
+ * 異なるCSVの学習履歴を誤って使用しないようにする
+ */
+function getCardSignature() {
+  return JSON.stringify(
+    cards
+      .slice()
+      .sort((a, b) => a.id - b.id)
+      .map(card => [card.front, card.back])
+  );
+}
+
+/*
+ * 学習履歴読み込み
+ */
+function loadProgress() {
+  const savedData = localStorage.getItem(STORAGE_KEY);
+
+  learned = new Set();
+
+  if (!savedData) return;
+
+  try {
+    const data = JSON.parse(savedData);
+
+    // 以前の形式や異なるCSVの履歴は引き継がない
+    if (data.cardSignature !== getCardSignature()) {
+      return;
+    }
+
+    learned = new Set(
+      data.learned.filter(id =>
+        cards.some(card => card.id === id)
+      )
+    );
+  } catch (error) {
+    learned = new Set();
   }
 }
 
-// 保存
-function saveProgress() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    learned: Array.from(learned)
-  }));
-}
-
-// 読み込み
-function loadProgress() {
-  const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-  if (!data) return;
-  learned = new Set(data.learned);
-}
-
-// 進捗
+/*
+ * 進捗更新
+ */
 function updateProgress() {
-  const percent = cards.length ? (learned.size / cards.length) * 100 : 0;
-  document.getElementById("progressFill").style.width = percent + "%";
+  const total = cards.length;
+  const learnedCount = cards.filter(
+    card => learned.has(card.id)
+  ).length;
+
+  const percent = total
+    ? (learnedCount / total) * 100
+    : 0;
+
+  document.getElementById("progressFill").style.width =
+    percent + "%";
+
   document.getElementById("progressText").textContent =
-    learned.size + " / " + cards.length;
+    learnedCount + " / " + total +
+    "（" + Math.round(percent) + "%）";
 }
 </script>
 
