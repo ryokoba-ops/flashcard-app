@@ -1,5 +1,5 @@
 {
-  "name": "単語帳アプリ",
+  "name": "単語帳アプリv2",
   "short_name": "単語帳",
   "start_url": "./index.html",
   "display": "standalone",
